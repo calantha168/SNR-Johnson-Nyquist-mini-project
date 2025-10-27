@@ -1,0 +1,64 @@
+
+The pipeline reads the full .wav file, but selects a single representative noise window and a single representative signal window for SNR analysis.
+This provides an unbiased, computationally efficient estimate of signal quality without requiring full call segmentation
+snr_phase0_setup:
+  goal: "Collect inputs and defaults for SNR + Johnson–Nyquist mini-project."
+  user_action:
+    - "Select USV .wav via file dialog."
+  outputs:
+    cfg:
+      wav_path: "<absolute path to wav>"
+      band_hz: [30000, 110000]          # USV band (Hz)
+      noise_len_s: 0.5                  # noise window length (s)
+      signal_len_s: 0.2                 # signal window length (s)
+      signal_len_clamp_s: [0.05, 0.25]  # clamp range for robustness
+      auto_noise: false                 # false=first 0.5 s, true=quietest window
+      guard_s: 0.05                     # gap between noise & signal windows
+      smooth_pct: 100                   # energy smoothing as % of signal_len
+      clip_edges: true                  # avoid windows hugging file edges
+      R_ohm: 1.0e9                      # seal resistance (Ω)
+      T_K: 300                          # temperature (K)
+      B_Hz: "diff(band_hz)"             # derived bandwidth
+      audioinfo:
+        fs: "wav sample rate (Hz) or empty"
+        duration: "wav duration (s) or empty"
+  sanity_checks:
+    nyquist:
+      condition: "audioinfo.fs present AND band_hz[1] < band_hz[2]"
+      rule: "band_hz[2] < audioinfo.fs / 2"
+      action_if_violation: "warn user to lower hi cutoff or record with higher fs"
+  next_step: "Phase 1 — Load & band-limit audio to band_hz."
+
+=============================================================
+snr_parameters_rationale:
+  noise_len_s:
+    default: 0.5
+    reason:
+      - "Captures stationary system noise"
+      - "125k+ samples at fs=250k → low variance RMS"
+      - "Beginning of file is often silent in USV recordings"
+  signal_len_s:
+    default: 0.2
+    biological_basis:
+      - "USV syllables: 5–150 ms"
+      - "USV bursts: up to 250 ms"
+    reason:
+      - "Long enough to capture full event"
+      - "Short enough to avoid mixed content"
+  signal_len_clamp_s:
+    limits: [0.05, 0.25]
+    reason:
+      - "Avoid too-short unstable windows"
+      - "Avoid too-long diluted energy windows"
+  auto_noise:
+    false_default: "First 0.5 s typically silent"
+    true_option: "Select quietest window over entire file if not"
+  guard_s:
+    default: 0.05
+    purpose: "Prevent noise & signal windows from overlapping"
+  smooth_pct:
+    default: 100
+    purpose: "Smoother energy detection → robust window selection"
+  clip_edges:
+    default: true
+    purpose: "Avoid edge artifacts from filtering"

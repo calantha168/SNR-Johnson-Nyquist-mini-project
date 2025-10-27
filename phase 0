@@ -1,0 +1,62 @@
+function cfg = snr_phase0_setup()
+% Phase 0 — Setup for SNR + Johnson–Nyquist mini-project
+% - Select .wav
+% - Set band (default 30–110 kHz) and core knobs (noise/signal window)
+% - Light sanity prints (fs, duration, Nyquist vs band)
+
+    fprintf('\n== SNR Phase 0: Setup ==\n');
+
+    % ---- Pick WAV ----
+    [f,p] = uigetfile({'*.wav','WAV audio (*.wav)'}, 'Select USV .wav');
+    assert(~isequal(f,0), 'No .wav selected.');
+    cfg.wav_path = fullfile(p,f);
+
+    % ---- Defaults (edit here if you like) ----
+    cfg.band_hz        = [30000 110000];  % USV band (Hz)
+    cfg.noise_len_s    = 0.5;             % noise window length (s)
+    cfg.signal_len_s   = 0.2;             % signal window length (s)
+    cfg.signal_len_clamp_s = [0.05 0.25]; % clamp for robustness
+    cfg.auto_noise     = false;           % false=use first 0.5 s; true=auto-pick quietest
+    cfg.guard_s        = 0.05;            % min gap between noise & signal windows
+    cfg.smooth_pct     = 100;             % energy smoothing as % of signal_len
+    cfg.clip_edges     = true;            % avoid very edge windows
+
+    % Johnson–Nyquist parameters (edit to your rig)
+    cfg.R_ohm          = 1.0e9;           % 1 GΩ gigaseal
+    cfg.T_K            = 300;             % ~27°C
+    cfg.B_Hz           = diff(cfg.band_hz); % bandwidth ≈ hi - lo
+
+    % ---- WAV info (for prints & Nyquist sanity) ----
+    fs = []; dur = [];
+    try
+        info = audioinfo(cfg.wav_path);
+        fs  = info.SampleRate;
+        dur = info.Duration;
+    catch
+        % keep empty if audioinfo not available
+    end
+    cfg.audioinfo = struct('fs',fs,'duration',dur);
+
+    % ---- Nyquist sanity (fs/2 must exceed hi cutoff) ----
+    if ~isempty(fs)
+        nyq = fs/2;
+        if cfg.band_hz(2) >= nyq
+            warning('Band hi (%.0f Hz) ≥ Nyquist (%.0f Hz). Consider lowering hi or using higher fs.', ...
+                cfg.band_hz(2), nyq);
+        end
+    end
+
+    % ---- Pretty summary ----
+    fprintf('WAV       : %s\n', cfg.wav_path);
+    if ~isempty(fs)
+        fprintf('fs        : %.0f Hz  | duration: %.2f s | Nyquist: %.0f Hz\n', fs, dur, fs/2);
+    else
+        fprintf('fs/dur    : (unavailable — could not read audioinfo)\n');
+    end
+    fprintf('Band      : %d–%d Hz (B = %d Hz)\n', cfg.band_hz(1), cfg.band_hz(2), cfg.B_Hz);
+    fprintf('Windows   : noise_len=%.2f s | signal_len=%.2f s (clamp [%.2f %.2f]) | guard=%.3f s\n', ...
+        cfg.noise_len_s, cfg.signal_len_s, cfg.signal_len_clamp_s(1), cfg.signal_len_clamp_s(2), cfg.guard_s);
+    fprintf('Auto-noise: %d | smooth=%.0f%% | clip_edges=%d\n', cfg.auto_noise, cfg.smooth_pct, cfg.clip_edges);
+    fprintf('J–N parms : R=%.2e Ω | T=%.0f K\n', cfg.R_ohm, cfg.T_K);
+    fprintf('== Phase 0 done. Next: Phase 1 — Load & Band-Limit ==\n\n');
+end
